@@ -30,5 +30,4 @@ export function renderMap(
         }
     }
     ctx.putImageData(img, 0, 0);
-
 }

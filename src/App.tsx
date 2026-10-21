@@ -1,35 +1,65 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useEffect, useRef, useState  } from "react";
+import { generateHeightMap } from "./assets/terrain/heightmap";
+import { shapeHeightmap, type TerrainType } from "./assets/terrain/shaping";
+import { renderMap } from "./rendering/rendermap";
+import './index.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+function App(){
+    const [terrain, setTerrain] = useState<TerrainType>("landmass");
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [seed, setSeed] = useState("42");
+    const [curSeed, setCurSeed] = useState(42);
 
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+
+    useEffect(() =>{
+        const canvas = canvasRef.current;
+
+        if(!canvas)return;
+        const rawHeightmap = generateHeightMap(300, 300, curSeed);
+        const shapedHeightmap = shapeHeightmap(rawHeightmap, terrain);
+
+        renderMap(canvas, shapedHeightmap);
+    }, [curSeed, terrain]);
+    
+    function generateWorld(){
+        const parsedSeed = Number(seed);
+
+        if(!Number.isSafeInteger(parsedSeed)){
+            alert("Enter a valid seed");
+            return;
+        }
+
+        setCurSeed(parsedSeed);
+    }
+    function randomiseSeed(){
+        const newSeed = Math.floor(Math.random() * 1_000_000_000);
+        setSeed(String(newSeed));
+        setCurSeed(newSeed);
+    }
+
+    return(
+        <main>
+            <h1>Sekai</h1>
+            <p>Procedural World Gen</p>
+
+            <div className = "controls">
+                <label htmlFor="seed">Seed</label>
+                <input id="seed" type = "number" value = {seed} onChange={(event) => setSeed(event.target.value)}/>
+                <button onClick={generateWorld}>Generate</button>
+                <button onClick={randomiseSeed}>Randomise</button>
+
+                <label htmlFor="terrain">Terrain</label>
+                <select id="terrain" value={terrain} onChange={(event) => setTerrain(event.target.value as TerrainType)}> 
+                    <option value = "landmass">Landmass </option>
+                    <option value="island">Island</option>
+                    <option value="mountains">Mountain Range</option>
+
+                </select>
+            </div>
+
+            <canvas ref={canvasRef} />
+        </main>
+    )
 }
 
-export default App
+export default App;
