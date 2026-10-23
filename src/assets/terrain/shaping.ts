@@ -23,30 +23,7 @@ export function shapeHeightmap(
 
             
             if (terrain === "mountains") {
-                const seedA = heightmap[0][0];
-                const seedB = heightmap[0][Math.floor(width / 2)];
-                const seedC = heightmap[Math.floor(height / 2)][0];
-                const seedD = heightmap[height - 1][width - 1];
-
-                const angle = (seedA - 0.5) * 0.9 + 0.25;
-                const slope = Math.tan(angle);
-                const offset = (seedB - 0.5) * 0.9;
-
-                const branchSlope1 = (seedC - 0.5) * 1.2;
-                const branchSlope2 = (seedD - 0.5) * 1.2;
-
-                const bend1 = 0.12*Math.sin(nx*3.0 + seedC*6.0) + 0.08*Math.sin(nx*6.0 + seedD*8.0);
-                const bend2 = 0.09*Math.sin(nx*3.5 + seedA*7.0) + 0.07*Math.sin(nx*7.0 + seedB*9.0);
-                const bend3 = 0.11*Math.sin(nx*2.8 + seedB*8.0) + 0.06 * Math.sin(nx * 6.5 + seedC * 7.0);
-
-                const mainRidge = Math.abs(ny - slope * nx - offset - bend1);
-                const branch1 = Math.abs(ny - branchSlope1 * nx + offset * 0.6 - 0.25 - bend2);
-                const branch2 = Math.abs(ny - branchSlope2 * nx + offset * 0.5 + 0.3 - bend3);
-
-                const ridge = 0.75 * Math.exp(-mainRidge * mainRidge * 10) + 0.4 * Math.exp(-branch1 * branch1 * 14) + 0.3 * Math.exp(-branch2 * branch2 * 16);
-                const foothills = Math.exp(-mainRidge * mainRidge * 2.5);
-
-                return clamp(0.08 + value * 0.35 + ridge * 0.42 + foothills * 0.15);
+                return clamp(0.16 + Math.pow(value, 1.15) * 0.84);
             }
 
             //landscape or wtvr

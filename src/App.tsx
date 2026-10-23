@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState  } from "react";
-import { generateHeightMap } from "./assets/terrain/heightmap";
+import { generateHeightMap, generateClimateMap } from "./assets/terrain/heightmap";
 import { shapeHeightmap, type TerrainType } from "./assets/terrain/shaping";
 import { renderMap } from "./rendering/rendermap";
 import './index.css';
@@ -15,10 +15,11 @@ function App(){
         const canvas = canvasRef.current;
 
         if(!canvas)return;
-        const rawHeightmap = generateHeightMap(300, 300, curSeed);
+        const rawHeightmap = generateHeightMap(300, 300, curSeed, false, terrain === "mountains");
+        const climateMap = generateClimateMap(300, 300, curSeed);
         const shapedHeightmap = shapeHeightmap(rawHeightmap, terrain);
 
-        renderMap(canvas, shapedHeightmap);
+        renderMap(canvas, shapedHeightmap, terrain, climateMap);
     }, [curSeed, terrain]);
     
     function generateWorld(){
