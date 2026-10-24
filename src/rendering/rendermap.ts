@@ -1,14 +1,50 @@
-import type { TerrainType } from "../assets/terrain/shaping";
+import { seaLevelFor, type TerrainType } from "../assets/terrain/shaping";
+import type { Hydro } from "../assets/terrain/rivers";
+import { distanceTo } from "../assets/terrain/distance";
+import type { Settlement } from "../assets/terrain/settlements";
+import type { Road } from "../assets/terrain/roads";
+import type { Sprites } from "./sprites";
 
+
+const RIVER_MIN = 300;   
+const MOUNTAIN_RIVER_MIN = 900;
+const LAKE_MIN = 0.05;
+const LAKE_EDGE = 0.004;
 const SHADE_STRENGTH = 10;
 type RGB = [number, number, number];
-
+const RIVER_COLOR: RGB = [48, 118, 168];
+const LAKE_SHALLOW_COLOR: RGB = [92, 168, 170];
+const SHORE_SCALE = 4;                          
+const LAKE_MID_COLOR: RGB = [52, 124, 160];
+const LAKE_DEEP_COLOR: RGB = [28, 82, 134];
+const LAKE_OPACITY_MIN = 0.55;   
+const BANK_WIDTH = 3;       
+const BANK_DARKEN = 0.3;
+const RIM_STRENGTH = 0.3;
+const SIZE_PX = { city: 12, town: 8, village: 8 };
+const CASING_PX = 3;
+const PLANK_EVERY = 3;
+const DECK_PX = 1;
+const CASING_COLOR = "#3a2a1a";      
+const DECK_COLOR = "#cfae72";        
+const PLANK_COLOR = "#8c6b3e";     
+const RIVER_WIDTH = 0.9;
+const RIVER_GROW = 0.05;
+const CONTOUR_STEP = 0.04;
+const INDEX_EVERY = 5;                
+const CONTOUR_ALPHA = 0.14;
+const INDEX_ALPHA = 0.28;
+const CONTOUR_COLOR: RGB = [60, 40, 25];
 
 export function renderMap(
     canvas: HTMLCanvasElement,
     heightmap: number[][],
     terrain: TerrainType,
-    climateMap: number[][]
+    climateMap: number[][],
+    hydro: Hydro | null,
+    settlements: Settlement[],
+    roads: Road[],
+    sprites: Sprites | null
 ): void{
     const height = heightmap.length;
     const width = heightmap[0].length;
@@ -22,7 +58,84 @@ export function renderMap(
         throw new Error("Could not get canvas context");
     }
     const img = ctx.createImageData(width, height);
-    const seaLevel = terrain === "mountains" ? 0 : 0.33;
+    const seaLevel = seaLevelFor(terrain);
+    const riverMin = terrain === "mountains" ? MOUNTAIN_RIVER_MIN : RIVER_MIN;
+    let shore: Float32Array | null = null;
+    let bank: Float32Array | null = null;
+    let riverAlpha: Float32Array | null = null;
+
+    if(hydro){
+        const n = width * height;
+        const isLake = new Uint8Array(n);
+        const isLand = new Uint8Array(n);
+
+        for(let i = 0; i < n; ++i){
+            const wet = hydro.depth[i] > LAKE_MIN;
+            isLake[i] = wet ? 1 : 0;
+            isLand[i] = wet ? 0 : 1;
+        }
+        shore = blur(blur(distanceTo(isLand, width, height), width, height), width, height);
+        bank = distanceTo(isLake, width, height);
+        riverAlpha = new Float32Array(n);
+
+        for(let y = 0; y <= height; ++y){
+            for(let x = 0; x<=width; ++x){
+                const f = hydro.fflow[y * width + x];
+                if(f <= riverMin)continue;
+
+                const r = RIVER_WIDTH + RIVER_GROW* Math.log2(f/riverMin);
+                const reach = Math.ceil(r + 1);
+
+                for(let dy = -reach; dy <= reach; ++dy){
+                    for (let dx = -reach; dx <= reach; ++dx){
+                        const nx = x + dx, ny = y + dy;
+                        if(nx < 0 || nx >= height || ny < 0 || ny >= width)continue;
+
+                        const a = 1 - smooth(r - 0.5, r + 0.5, Math.hypot(dx, dy));
+                        const ni = ny*width + nx;
+                        if (a > riverAlpha[ni]) riverAlpha[ni] = a;
+                    }
+                }
+            }
+        }
+    }
+
+    function blur(src: Float32Array, w:number, h:number): Float32Array{
+        const out = new Float32Array(src.length);
+        for(let y = 0; y < h; ++y){
+            for(let x = 0; x < w; ++ x){
+                let sum = 0;
+                let cnt = 0;
+
+                for(let dy = -1; dy <= 1; ++dy){
+                    for (let dx = -1; dx <= 1; ++dx) {
+                        const nx = x + dx, ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                        sum += src[ny*w + nx];
+                        ++cnt;
+                    }
+                }
+                out[y*w + x] = sum/cnt
+            }
+        }
+        return out;
+    }
+
+    function lakeColor(dist: number): RGB {
+        const t = 1 - Math.exp(-dist / SHORE_SCALE);   
+        return t < 0.5 ? mix(LAKE_SHALLOW_COLOR, LAKE_MID_COLOR, t * 2): mix(LAKE_MID_COLOR, LAKE_DEEP_COLOR, (t - 0.5) * 2);
+    }
+
+    const flat = new Float32Array(width * height);
+    for(let y = 0; y < height; ++y){
+        for(let x = 0; x < width; ++x){
+            flat[y*width + x] = heightmap[y][x];
+        }
+    }
+
+    const smoothH = blur(blur(flat, width, height), width, height);
+    const band = (i: number) => Math.floor((smoothH[i] - seaLevel) / CONTOUR_STEP);
+
     for(let y = 0; y < height; ++y){
         for(let x = 0; x < width; ++x){
             const elevation = heightmap[y][x];
@@ -36,13 +149,106 @@ export function renderMap(
             const light = onLand? hillShade(heightmap,x,y, SHADE_STRENGTH) : 1;
             const j = onLand ? jitter(x, y) : 0;
 
-            img.data[idx] = r*light + j;
-            img.data[idx+1] = g*light + j;
-            img.data[idx+2] = b*light + j;
+            let R = r*light + j;
+            let G = g*light + j;
+            let B = b*light + j;
+
+            if(onLand && x < width - 1 && y < height - 1){
+                const i0 = y * width + x;
+                const b0 = band(i0);
+                const bR = band(i0 + 1);
+                const bD = band(i0 + width);
+
+                if(b0 !== bR || b0 !== bD){
+                const level = Math.max(b0, bD, bR);
+                
+                if(level > 0){
+                        const a = level % INDEX_EVERY === 0 ? INDEX_ALPHA : CONTOUR_ALPHA;
+                        R+= (CONTOUR_COLOR[0] - R)*a;
+                        G+= (CONTOUR_COLOR[1] - G)*a;
+                        B+= (CONTOUR_COLOR[2] - B)*a;
+                    }
+                }
+            }
+
+            if(hydro && onLand){
+                const i = y*width + x;
+                const riv = riverAlpha![i];
+                R+= (RIVER_COLOR[0] - R)*riv;
+                G+= (RIVER_COLOR[1] - G)*riv;
+                B+= (RIVER_COLOR[2] - B)*riv;
+
+                const lake = smooth(LAKE_MIN, LAKE_MIN + LAKE_EDGE, hydro.depth[i]);
+                if (lake > 0) {
+                    const c = lakeColor(shore![i]);
+                    const deep = 1 - Math.exp(-shore![i]/SHORE_SCALE);
+                    const opacity = lake * (LAKE_OPACITY_MIN + (1 - LAKE_OPACITY_MIN) * deep);
+
+                    R += (c[0] - R) * opacity;
+                    G += (c[1] - G) * opacity;
+                    B += (c[2] - B) * opacity;
+
+                    const rim = (1 - smooth(0, 2.5, shore![i])) * RIM_STRENGTH * lake;
+                    R += (255 - R) * rim;
+                    G += (255 - G) * rim;
+                    B += (255 - B) * rim;
+
+                }else{
+                    const o = bank![i];
+                    if (o < BANK_WIDTH) {
+                        const k = (1 - o / BANK_WIDTH) * BANK_DARKEN;
+                        R *= 1 - k;
+                        G *= 1 - k;
+                        B *= 1 - k;
+                    }
+                }
+            }
+
+            img.data[idx] = R;
+            img.data[idx+1] = G;
+            img.data[idx+2] = B;
             img.data[idx+3] = 255;
         }
     }
     ctx.putImageData(img, 0, 0);
+    const stamp = (p: {x:number; y:number}, px: number) => {
+        const half = Math.floor(px / 2);
+        ctx.fillRect(p.x - half, p.y - half, px, px);
+    }
+    ctx.fillStyle  = CASING_COLOR;
+    for(const road of roads){
+        for(const p of road){
+            stamp(p, CASING_PX);
+        }
+    }
+
+    ctx.fillStyle = DECK_COLOR;
+    for(const road of roads){
+        for(const p of road){
+            stamp(p, DECK_PX);
+        }
+    }
+
+    if(PLANK_EVERY > 0){
+        ctx.fillStyle = PLANK_COLOR;
+        for(const road of roads){
+            road.forEach((p,k) => {
+                if (k%PLANK_EVERY === 0){
+                    stamp(p, DECK_PX);
+                }
+            });
+        }
+    }
+    ctx.imageSmoothingEnabled = false; 
+
+    for(const s of settlements){
+        const img  = sprites?.[s.size];
+        if (!img) continue;
+        
+        const w = SIZE_PX[s.size];
+        const h = Math.round(w*img?.height/img?.width);
+        ctx.drawImage(img, Math.round(s.x - w / 2), Math.round(s.y - h + 1), w, h);
+    }
 }
 
 function jitter(x:number, y:number):number {
@@ -137,3 +343,4 @@ function getTerrainColor(height: number, terrain: TerrainType,climate: number, s
     if (height > 0.43) return [52, 122, 56];       // Forest
     return [120, 184, 74];                         // Plains
 }
+

@@ -1,25 +1,42 @@
 import { useEffect, useRef, useState  } from "react";
 import { generateHeightMap, generateClimateMap } from "./assets/terrain/heightmap";
-import { shapeHeightmap, type TerrainType } from "./assets/terrain/shaping";
+import { shapeHeightmap, seaLevelFor, type TerrainType } from "./assets/terrain/shaping";
 import { renderMap } from "./rendering/rendermap";
+import {flow} from "./assets/terrain/rivers"
 import './index.css';
+import { placeSettlements } from "./assets/terrain/settlements";
+import { buildRoads } from "./assets/terrain/roads";
+import { spritesPromise } from "./rendering/sprites";
+import type { Settlement } from "./assets/terrain/settlements";
+const SIZE = 300;
+
 
 function App(){
     const [terrain, setTerrain] = useState<TerrainType>("landmass");
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [seed, setSeed] = useState("42");
     const [curSeed, setCurSeed] = useState(42);
+    const [towns, setTowns] = useState<Settlement[]>([]);
 
 
     useEffect(() =>{
-        const canvas = canvasRef.current;
+        let cancelled = false;
+        (async () => {
+            const sprites = await spritesPromise;
+            const canvas = canvasRef.current;
+            if(cancelled || !canvas)return;
+            const rawHeightmap = generateHeightMap(SIZE, SIZE, curSeed, terrain === "mountains");
+            const climateMap = generateClimateMap(SIZE, SIZE, curSeed);
+            const shapedHeightmap = shapeHeightmap(rawHeightmap, terrain);
 
-        if(!canvas)return;
-        const rawHeightmap = generateHeightMap(300, 300, curSeed, false, terrain === "mountains");
-        const climateMap = generateClimateMap(300, 300, curSeed);
-        const shapedHeightmap = shapeHeightmap(rawHeightmap, terrain);
+            const hydro = flow(shapedHeightmap, seaLevelFor(terrain), curSeed);
+            const settlements = placeSettlements(shapedHeightmap, hydro, terrain, curSeed);
+            const roads = buildRoads(shapedHeightmap, hydro, terrain, settlements);
 
-        renderMap(canvas, shapedHeightmap, terrain, climateMap);
+            renderMap(canvas, shapedHeightmap, terrain, climateMap, hydro, settlements, roads, sprites);
+            setTowns(settlements);
+        })();
+        return() => {cancelled = true;};
     }, [curSeed, terrain]);
     
     function generateWorld(){
@@ -58,7 +75,18 @@ function App(){
                 </select>
             </div>
 
-            <canvas ref={canvasRef} />
+            <div className="map">
+                <canvas ref={canvasRef}/>
+                {towns.map(s => (
+                    <span
+                        key ={`${s.x}-${s.y}`}
+                        className={`label ${s.size}`}
+                        style={{ left: `${(s.x / SIZE) * 100}%`, top: `${((s.y + 3) / SIZE) * 100}%` }}
+                    >
+                        {s.name}
+                    </span>
+                ))}
+            </div>
         </main>
     )
 }

@@ -69,3 +69,7 @@ function sampleNoise(heightmap: number[][], x: number, y:number, scale: number):
 
     return (top * (1 - ty) + bottom * ty) * 2 - 1;
 }
+
+export function seaLevelFor(terrain: TerrainType): number {
+    return terrain === "mountains" ? 0 : 0.33;
+}
