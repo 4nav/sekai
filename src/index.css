@@ -10,50 +10,73 @@ body{
 }
 
 main{
-  max-width: 1000px;
-  margin: 40px auto;
-  padding: 24px;
+  width: min(1100px, 94vw);
+  margin: 36px auto;
+  padding: 12px 0 40px;
 }
 
-h1{
-  margin-bottom: 4px;
-  letter-spacing: 2px;
+.page-header {
+  margin-bottom: 20px;
 }
 
-p{
+.page-header h1{
+  margin: 0;
+  color: #e5e9e5;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  line-height:1.2;
+}
+
+.page-header p{
+  margin: 4px 0 0;
   color: #9eaaa3;
+  font-size: 13px;
+  letter-spacing: 0.5px;
 }
 
-canvas{
+
+canvas {
   display: block;
   width: 100%;
   max-width: 700px;
   height: auto;
-  margin-top: 24px;
   border: 1px solid #394641;
   image-rendering: pixelated;
 }
 
-.controls{
+.controls {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 20px;
+  margin: 22px 0;
+  padding: 12px 0;
+  border-top: 1px solid #394641;
+  border-bottom: 1px solid #394641;
+}
+
+.controls label {
+  color: #9eaaa3;
+  font-size: 14px;
 }
 
 .controls input,
-.controls button{
-  padding: 9px, 12px;
+.controls select,
+.controls button {
+  min-height: 36px;
+  padding: 8px 11px;
   border: 1px solid #394641;
-  border-radius: 6px;
-  background: #1b2522;
+  border-radius: 3px;
+  background: #111817;
   color: #e5e9e5;
   font: inherit;
+  font-size: 14px;
 }
 
 .controls input {
-  width: 150px;
+  width: 125px;
 }
 
 .controls button {
@@ -61,34 +84,51 @@ canvas{
 }
 
 .controls button:hover {
-  background: #2a3933;
+  background: #26312c;
+  border-color: #58675d;
 }
 
-.controls select {
-  padding: 9px 12px;
-  border: 1px solid #394641;
-  border-radius: 6px;
-  background: #1b2522;
-  color: #e5e9e5;
-  font: inherit;
+.controls .export-button {
+  margin-left: auto;
+  background: #26352c;
+  border-color: #46594b;
 }
 
+.controls .export-button:hover {
+  background: #304337;
+}
+
+.controls input:focus-visible,
+.controls select:focus-visible,
+.controls button:focus-visible {
+  outline: 2px solid #8d9d8e;
+  outline-offset: 2px;
+}
+
+@media (max-width: 650px) {
+  .controls .export-button {
+    margin-left: 0;
+  }
+}
 .map {
-    position: relative;
-    width: min(96vw, calc(100vh - 170px));   /* biggest square that fits the window */
-    aspect-ratio: 1;
+  position: relative;
+  width: min(100%, 700px);
+  margin: 24px auto 0;
+  overflow: hidden;
+  line-height: 0;
 }
 
 .map canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-    image-rendering: pixelated;              /* keeps it crisp instead of blurry */
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  image-rendering: pixelated;
 }
 
 .label{
   position: absolute;
-  transition: translateX(-50%);
+  transform: translateX(-50%);
   pointer-events: none;
   white-space: nowrap;
   font-family: Georgia, serif;

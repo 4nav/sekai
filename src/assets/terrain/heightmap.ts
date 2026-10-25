@@ -2,7 +2,7 @@ import { createNoise2D } from "simplex-noise";
 import { makeRng } from "./rng";
 
 
-export function generateHeightMap(width: number,height: number,seed: number, broadRelief = false):number[][]{
+export function generateHeightMap(width: number,height: number,seed: number, broadRelief = false, gain = 0.5):number[][]{
     const noise = createNoise2D(makeRng(seed, 0));
     const warpX = createNoise2D(makeRng(seed, 2));
     const warpY = createNoise2D(makeRng(seed, 3));
@@ -26,7 +26,7 @@ export function generateHeightMap(width: number,height: number,seed: number, bro
             for(let oct = 0; oct < (broadRelief ? 6 : 5); ++oct){
                 elevation += noise(qx * freq, qy * freq) * amp;
                 totamp += amp;
-                amp /= broadRelief ? 1.8 : 2;
+                amp *= broadRelief ? 1 / 1.7 : gain;
                 freq*=2;     
             }
             row.push((elevation / totamp + 1) / 2);

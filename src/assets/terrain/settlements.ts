@@ -3,10 +3,7 @@ import { seaLevelFor, type TerrainType } from "./shaping";
 import type { Hydro } from "./rivers";
 import { makeRng } from "./rng";
 import { makeNames } from "./names";
-
-const RIVER_MIN = 200;
-const MOUNTAIN_RIVER_MIN = 500;
-const LAKE_MIN = 0.05;
+import { RIVER_MIN, MOUNTAIN_RIVER_MIN, LAKE_MIN } from "./config";
 
 export type Settlement = {x: number, y: number; size: "city" | "town" | "village"; name:string};
 

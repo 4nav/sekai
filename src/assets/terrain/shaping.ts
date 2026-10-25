@@ -35,7 +35,8 @@ export function shapeHeightmap(
             const coastline = 0.22 * coastNoise + 0.025 * Math.sin(nx * 4.0 + ny * 3.0) + 0.02 * Math.sin(ny * 6.0 - nx * 2.0);
 
             const mask = clamp((1.12 - dist + coastline) * 2.0);
-            return clamp(0.02 + mask * (0.2 + value * 0.78));
+            const relief = Math.pow(value, 1.35);
+            return clamp(0.02 + mask * (0.2 + relief * 0.72));
         })
     );
 }

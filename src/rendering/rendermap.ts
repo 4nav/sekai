@@ -1,14 +1,12 @@
 import { seaLevelFor, type TerrainType } from "../assets/terrain/shaping";
 import type { Hydro } from "../assets/terrain/rivers";
-import { distanceTo } from "../assets/terrain/distance";
+import { distanceTo, blur } from "../assets/terrain/distance";
 import type { Settlement } from "../assets/terrain/settlements";
 import type { Road } from "../assets/terrain/roads";
 import type { Sprites } from "./sprites";
+import { RIVER_MIN, MOUNTAIN_RIVER_MIN, LAKE_MIN } from "../assets/terrain/config";
+import type { ClimateField } from "../assets/terrain/climate";
 
-
-const RIVER_MIN = 300;   
-const MOUNTAIN_RIVER_MIN = 900;
-const LAKE_MIN = 0.05;
 const LAKE_EDGE = 0.004;
 const SHADE_STRENGTH = 10;
 type RGB = [number, number, number];
@@ -30,17 +28,98 @@ const DECK_COLOR = "#cfae72";
 const PLANK_COLOR = "#8c6b3e";     
 const RIVER_WIDTH = 0.9;
 const RIVER_GROW = 0.05;
-const CONTOUR_STEP = 0.04;
-const INDEX_EVERY = 5;                
+const CONTOUR_STEP: Record<TerrainType, number> = { landmass: 0.07, island: 0.05, mountains: 0.04 };const INDEX_EVERY = 5;                
 const CONTOUR_ALPHA = 0.14;
 const INDEX_ALPHA = 0.28;
 const CONTOUR_COLOR: RGB = [60, 40, 25];
+
+const LAND: RGB[][] = [
+    [[150, 155, 140], [128, 150, 120], [76, 120, 98],  [52, 98, 84]],
+    [[172, 166, 110], [136, 170, 84],  [62, 128, 62],  [34, 100, 58]],
+    [[208, 180, 110], [182, 176, 84],  [70, 140, 56],  [66, 110, 72]],
+    [[226, 196, 128], [200, 150, 80],  [60, 138, 52],  [34, 108, 46]],
+];
+const TROPICAL: RGB[][] = [
+    [[150, 155, 140], [128, 150, 120], [76, 120, 98],  [52, 98, 84]],
+    [[172, 166, 110], [120, 168, 80],  [70, 150, 70],  [40, 118, 60]],
+    [[222, 196, 128], [170, 184, 84],  [84, 160, 62],  [40, 128, 56]],
+    [[236, 208, 140], [190, 176, 88],  [74, 160, 56],  [30, 122, 50]],
+];
+const ALPINE: RGB[][] = [
+    [[132, 134, 122], [110, 128, 104], [70, 106, 86],  [48, 86, 74]],     
+    [[150, 148, 100], [118, 146, 84],  [58, 112, 62],  [36, 88, 52]],     
+    [[184, 166, 100], [150, 158, 80],  [66, 122, 56],  [44, 98, 50]],
+    [[206, 172, 104], [176, 146, 80],  [70, 120, 52],  [48, 96, 46]],
+];
+
+type Style = {
+    palette: RGB[][];
+    discrete: boolean;
+    rockColor: RGB;
+    rockSlope: [number, number];
+    rockFrom: [number, number];
+    highRock: [number, number];
+    beach: [number, number] | null;
+    marsh: number;
+}
+
+type Biome = {color: RGB; speck?: RGB,density?: number, band?: boolean};
+
+const B = {
+    snowPlains: { color: [228, 236, 240]},
+    snowTaiga:  { color: [214, 226, 228]},
+    tundra:     { color: [150, 158, 140]},
+    taiga:      { color: [62, 102, 82]},
+    spruce:     { color: [44, 82, 66]},
+    plains:     { color: [142, 184, 86]},
+    flowers:    { color: [152, 192, 96]},
+    forest:     { color: [66, 134, 64]},
+    birch:      { color: [112, 164, 92]},
+    darkForest: { color: [38, 96, 50]},
+    swamp:      { color: [84, 112, 72]},
+    savanna:    { color: [196, 178, 90]},
+    shrub:      { color: [158, 172, 82] },
+    jungle:     { color: [38, 146, 48]},
+    desert:     { color: [228, 202, 132] },
+    badlands:   { color: [196, 118, 70], band: true },
+} satisfies Record<string, Biome>;
+
+const BANDS: RGB[] = [[196, 118, 70], [214, 142, 88], [176, 100, 62], [224, 170, 110]];
+
+const COLD = 0.10;
+const COOL = 0.30;
+const TEMPERATE = 0.60;
+const WARM = 0.82;
+const DRY = 0.30;
+const WET = 0.62;
+
+function pickBiome(t: number, m: number, height: number, slope: number, v:number):Biome{
+    if(t < COLD)return m < 0.5?B.snowPlains:B.snowTaiga;
+    if (t < COOL) return m < DRY ? B.tundra : m < WET ? B.taiga : B.spruce;
+    if(t < TEMPERATE){
+        if (m < DRY) return v > 0.45 ? B.flowers : B.plains;
+        if (m < WET) return v > 0.35 ? B.birch : v < -0.35 ? B.darkForest : B.forest;
+        return height < 0.45 && slope < 0.02 ? B.swamp : B.darkForest;
+    }
+    if(t < WARM){
+        if(m < DRY)return B.savanna;
+        if (m < WET) return v > 0.3 ? B.plains : B.shrub;
+        return B.jungle;
+    }
+    return m < DRY?B.desert: m < WET? B.badlands:B.jungle;
+}
+
+const STYLES: Record<TerrainType, Style> = {
+    landmass:  { palette: LAND,     discrete: true, rockColor: [125, 127, 120], rockSlope: [0.035, 0.08],  rockFrom: [0.40, 0.60], highRock: [0.70, 0.88], beach: [0.33, 0.37], marsh: 0.6 },
+    island:    { palette: TROPICAL, discrete: true, rockColor: [112, 105, 91],  rockSlope: [0.035, 0.08],  rockFrom: [0.45, 0.65], highRock: [0.80, 0.95], beach: [0.34, 0.42], marsh: 0.4 },
+    mountains: { palette: ALPINE,   discrete: true, rockColor: [108, 110, 108], rockSlope: [0.018, 0.055], rockFrom: [0.30, 0.48], highRock: [0.62, 0.80], beach: null,         marsh: 0 },
+};
 
 export function renderMap(
     canvas: HTMLCanvasElement,
     heightmap: number[][],
     terrain: TerrainType,
-    climateMap: number[][],
+    field: ClimateField,
     hydro: Hydro | null,
     settlements: Settlement[],
     roads: Road[],
@@ -78,8 +157,8 @@ export function renderMap(
         bank = distanceTo(isLake, width, height);
         riverAlpha = new Float32Array(n);
 
-        for(let y = 0; y <= height; ++y){
-            for(let x = 0; x<=width; ++x){
+        for(let y = 0; y < height; ++y){
+            for(let x = 0; x< width; ++x){
                 const f = hydro.fflow[y * width + x];
                 if(f <= riverMin)continue;
 
@@ -89,7 +168,7 @@ export function renderMap(
                 for(let dy = -reach; dy <= reach; ++dy){
                     for (let dx = -reach; dx <= reach; ++dx){
                         const nx = x + dx, ny = y + dy;
-                        if(nx < 0 || nx >= height || ny < 0 || ny >= width)continue;
+                        if(nx < 0 || nx >= width || ny < 0 || ny >= height)continue;
 
                         const a = 1 - smooth(r - 0.5, r + 0.5, Math.hypot(dx, dy));
                         const ni = ny*width + nx;
@@ -98,27 +177,6 @@ export function renderMap(
                 }
             }
         }
-    }
-
-    function blur(src: Float32Array, w:number, h:number): Float32Array{
-        const out = new Float32Array(src.length);
-        for(let y = 0; y < h; ++y){
-            for(let x = 0; x < w; ++ x){
-                let sum = 0;
-                let cnt = 0;
-
-                for(let dy = -1; dy <= 1; ++dy){
-                    for (let dx = -1; dx <= 1; ++dx) {
-                        const nx = x + dx, ny = y + dy;
-                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                        sum += src[ny*w + nx];
-                        ++cnt;
-                    }
-                }
-                out[y*w + x] = sum/cnt
-            }
-        }
-        return out;
     }
 
     function lakeColor(dist: number): RGB {
@@ -134,16 +192,15 @@ export function renderMap(
     }
 
     const smoothH = blur(blur(flat, width, height), width, height);
-    const band = (i: number) => Math.floor((smoothH[i] - seaLevel) / CONTOUR_STEP);
+    const band = (i: number) => Math.floor((smoothH[i] - seaLevel) / CONTOUR_STEP[terrain]);
 
     for(let y = 0; y < height; ++y){
         for(let x = 0; x < width; ++x){
             const elevation = heightmap[y][x];
 
             const idx = (y*width + x)*4;
-
             const slope = slopeAt(heightmap, x, y);
-            const [r, g, b] = getTerrainColor(elevation, terrain, climateMap[y][x], slope);
+            const [r, g, b] = getTerrainColor(elevation, terrain, field.temp[y*width + x], field.moist[y*width + x], field.variant[y*width + x], slope,x,y);
 
             const onLand = elevation > seaLevel;
             const light = onLand? hillShade(heightmap,x,y, SHADE_STRENGTH) : 1;
@@ -290,57 +347,70 @@ const smooth = (a: number, b: number, v: number) => {
     return t * t * (3 - 2 * t);
 };
 
-function mountainColor(height: number, slope: number):RGB{
-    let c: RGB = [48, 112, 62];
-    c = mix(c, [119, 137, 79], smooth(0.30, 0.36, height));
-    c = mix(c, [132, 134, 130], smooth(0.43, 0.50, height));
-    c = mix(c, [76, 82, 91], smooth(0.018, 0.055, slope) * smooth(0.38, 0.48, height));
+const WATER: Record<"landmass" | "island", [number,RGB][]> = {
+    landmass: [[0.15, [25, 60, 104]], [0.25, [40, 120, 165]], [0.30, [85, 184, 201]], [0.33, [217, 194, 126]]],
+    island:   [[0.15, [18, 39, 76]],  [0.25, [25, 81, 119]],  [0.30, [40, 151, 165]], [0.34, [231, 207, 148]]],
+};
 
-    const snowline = smooth(0.60, 0.70, height);
-    const snowCoverage = 0.68 + smooth(0.035, 0.12, slope) * 0.32;
-    return mix(c, [239, 242, 244], snowline * snowCoverage);
+function getTerrainColor(height: number, terrain: TerrainType, temp: number, moist: number, variant: number, slope:number, x: number, y: number): RGB{
+    if (terrain !== "mountains"){
+        for(const [limit, color] of WATER[terrain]){
+            if (height < limit) return color;
+        }
+    }
+    return biomeColor(STYLES[terrain], temp, moist, variant, height, slope, x, y);
 }
 
-function getTerrainColor(height: number, terrain: TerrainType,climate: number, slope: number):[number, number, number] {
-    if (terrain === "mountains") return mountainColor(height, slope);
+const BIOME_STEPS = 12;
+const BIOME_NOISE = 0.025;
 
-    if (terrain === "island") {
-        if (height < 0.15) return [18, 39, 76];    // Deep pirate-sea navy
-        if (height < 0.25) return [25, 81, 119];   // Open ocean
-        if (height < 0.30) return [40, 151, 165];  // Turquoise shallows
-        if (height < 0.34) return [231, 207, 148]; // Pale sandy beaches
-        if (height < 0.43) return climate > 0.2 ? [205, 185, 120] : [190, 177, 105]; // Dry sand and scrub
-        if (height < 0.55) return climate < -0.1 ? [86, 140, 70] : [110, 151, 65];  // Tropical grass
-        if (height < 0.70) return climate > 0.2 ? [74, 120, 50] : [54, 112, 52];   // Dense jungle
-        if (height < 0.80) return [39, 83, 49];    // Dark jungle
-        if (height < 0.90) return [112, 105, 91];  // Rocky cliffs
-        return [184, 181, 163];                    // Pale exposed rock
+const SAND_COLOR: RGB = [222, 198, 134];
+const SNOW_COLOR: RGB = [238, 240, 236];
+const MARSH_COLOR: RGB = [78, 112, 72];
+
+const clamp = (v: number) => Math.max(0, Math.min(1, v));
+
+function biomeColor(s: Style, temp: number, moist: number,variant: number, height: number, slope: number, x: number, y: number): RGB {
+    if (s.discrete) return discreteBiomeColor(s, temp, moist, variant, height, slope, x, y);
+    const t = clamp(temp + jitter(x,y)*(BIOME_NOISE/1.5));
+    const m = clamp(moist + jitter(x + 97,y + 31)*(BIOME_NOISE/1.5));
+    const q = (v:number) => ((BIOME_STEPS > 0)?Math.round(v*BIOME_STEPS)/BIOME_STEPS:v);
+
+    const ft = q(t) * 3;
+    const fm = q(m) * 3;
+    const t0 = Math.min(2, Math.floor(ft));
+    const m0 = Math.min(2, Math.floor(fm));
+    const top = mix(s.palette[t0][m0], s.palette[t0][m0 + 1], fm-m0);
+    const bot = mix(s.palette[t0 + 1][m0], s.palette[t0 + 1][m0 + 1], fm - m0);
+    let c = mix(top, bot, ft-t0);
+    
+    if(s.beach){
+        c = mix(SAND_COLOR, c, smooth(s.beach[0], s.beach[1], height));
     }
+    const marsh = smooth(0.8, 0.95, moist)* (1 - smooth(0.01, 0.03, slope)) * (1 - smooth(0.38, 0.5, height)) * s.marsh;
+    c = mix(c, MARSH_COLOR, marsh);
 
-    // Landmass
-    if (height < 0.15) return [25, 60, 104];       // Deep ocean
-    if (height < 0.25) return [40, 120, 165];      // Ocean
-    if (height < 0.30) return [85, 184, 201];      // Shallow water
-    if (height < 0.33) return [217, 194, 126];     // Beach
+    const rock = Math.max(smooth(s.rockSlope[0], s.rockSlope[1], slope) * smooth(s.rockFrom[0], s.rockFrom[1], height), smooth(s.highRock[0], s.highRock[1], height));
+    c = mix(c, s.rockColor, rock);
 
-    if (height > 0.84) return [238, 240, 236];     // Snow
-    if (height > 0.72) return [125, 127, 120];     // Stone
-
-    // Cold
-    if (climate < -0.25) {
-        if (height > 0.62) return [105, 111, 105]; // Cold stone
-        return [94, 128, 105];                     // Taiga
-    }
-
-    // Hot
-    if (climate > 0.25) {
-        if (height > 0.55) return [174, 123, 78];  // Badlands
-        return [222, 195, 126];                    // Sand
-    }
-
-    // Temperate
-    if (height > 0.58) return [82, 119, 63];       // Forested highlands
-    if (height > 0.43) return [52, 122, 56];       // Forest
-    return [120, 184, 74];                         // Plains
+    const snow = (1 - smooth(0.06, 0.16, temp)) * (1 - 0.6*smooth(0.05, 0.10, slope));
+    return mix(c, SNOW_COLOR, snow);
 }
 
+function discreteBiomeColor(s:Style, temp: number, moist: number, variant: number, height: number, slope: number, x: number, y: number):RGB{
+    const t= clamp(temp + jitter(x,y)*0.02);
+    const m = clamp(moist + jitter(x + 97, y + 31)*0.02);
+    const b = pickBiome(t,m, height, slope, variant);
+
+    let c: RGB = b.color;
+    if (b.band) c = BANDS[Math.floor(height * 55) % BANDS.length];
+
+    if(s.beach){
+        c = mix(SAND_COLOR ,c, smooth(s.beach[0], s.beach[1], height));
+    }
+
+    const rock = Math.max(smooth(s.rockSlope[0], s.rockSlope[1], slope) * smooth(s.rockFrom[0], s.rockFrom[1], height), smooth(s.highRock[0], s.highRock[1], height));
+    c = mix(c, s.rockColor, rock);
+    const snow = (1 - smooth(0.06, 0.16, temp)) * (1 - 0.6 * smooth(0.05, 0.10, slope));
+    return mix(c, SNOW_COLOR, snow);
+}

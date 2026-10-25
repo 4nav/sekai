@@ -27,3 +27,23 @@ export function distanceTo(mask: Uint8Array, w:number, h:number): Float32Array{
 }
 
 
+export function blur(src: Float32Array, w:number, h:number): Float32Array{
+        const out = new Float32Array(src.length);
+        for(let y = 0; y < h; ++y){
+            for(let x = 0; x < w; ++ x){
+                let sum = 0;
+                let cnt = 0;
+
+                for(let dy = -1; dy <= 1; ++dy){
+                    for (let dx = -1; dx <= 1; ++dx) {
+                        const nx = x + dx, ny = y + dy;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                        sum += src[ny*w + nx];
+                        ++cnt;
+                    }
+                }
+                out[y*w + x] = sum/cnt
+            }
+        }
+        return out;
+    }
