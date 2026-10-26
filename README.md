@@ -1,54 +1,37 @@
-# React + TypeScript + Vite
+# Sekai
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A procedural world generator that transforms seeded noise into explorable maps with varied terrain, biomes, rivers, settlements, and roads.
 
-Currently, two official plugins are available:
+**[Try Sekai →](https://sekai-sepia.vercel.app)**
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+![Sekai generating a procedural world](docs/demo.png)
 
-## Expanding the ESLint configuration
+## Features
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Seeded generation:** Generate random worlds using a seed, so you can recreate maps you like.
+- **Three terrain types:** Generate landmasses, islands, and mountain ranges.
+- **Procedural geography:** Generate terrain with different elevations, climates, and Minecraft-inspired biomes.
+- **Rivers and roads:** Add procedurally generated rivers, settlements, and roads to make the maps feel more like actual worlds.
+- **Settlements:** Populate maps with named settlements and sprites.
+- **PNG export** 
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+## Run locally
+
+You'll need Node.js and npm installed.
+
+```bash
+git clone https://github.com/4nav/sekai
+cd sekai
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## How it works
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Sekai generates a heightmap from a seed, then shapes it according to the selected terrain type. Elevation and seeded climate data determine the terrain's appearance, while hydrology, settlement placement, and road generation add features that interact with the geography.
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+The project is built with React, TypeScript, Vite, and the HTML Canvas API, with the generation pipeline split into separate modules for terrain, climate, rivers, settlements, roads, and rendering.
+
+## Acknowledgements
+
+AI tools were used to help generate settlement names and sprites. 
